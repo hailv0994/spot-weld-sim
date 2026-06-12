@@ -1,0 +1,10 @@
+# Cấu hình deploy Netlify cho Spot Weld Sim (static Vite build).
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+# Đảm bảo file .wasm (occt-import-js) phục vụ đúng MIME.
+[[headers]]
+  for = "/*.wasm"
+  [headers.values]
+    Content-Type = "application/wasm"
