@@ -58,7 +58,7 @@ export default function App() {
             {viewMode === '3d' ? (
               <>
                 <GeometryImport />
-                <div className="h-[420px] overflow-hidden rounded-lg border border-white/10">
+                <div className="h-[580px] overflow-hidden rounded-xl border border-white/10 shadow-xl">
                   <WeldScene />
                 </div>
               </>
