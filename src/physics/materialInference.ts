@@ -116,8 +116,8 @@ interface Rule {
 
 // Thứ tự: cụ thể → tổng quát. CC = mã đã chuẩn hoá (HOA, bỏ khoảng trắng).
 const RULES: Rule[] = [
-  // Đồng / điện cực
-  { re: /^(CUCRZR|CUCR1ZR|C181\d\d|C152\d\d|RWMA)/, family: 'Hợp kim đồng (điện cực)',
+  // Đồng / điện cực — CuCr, CuCrZr, C18xxx, RWMA Class…
+  { re: /^(CU[-]?CR|CUCRZR|CUCR1ZR|CUCRZ|C181\d\d|C152\d\d|C180\d\d|RWMA)/, family: 'Hợp kim đồng (điện cực)',
     build: (c) => copper(c) },
   // Thép tôi ép / boron (press-hardened)
   { re: /(22MNB5|MBW|USIBOR|PHS15\d\d|MARTENS)/, family: 'Thép tôi ép / martensitic',

@@ -96,11 +96,25 @@ export function WeldStack() {
     <group>
       <Plate geom={partGeoms.part1} yCenter={t1 / 2} thicknessMm={t1} sizeMm={sizeMm} color="#7f8c9b" />
       <Plate geom={partGeoms.part2} yCenter={-t2 / 2} thicknessMm={t2} sizeMm={sizeMm} color="#6b7886" />
-      {!partGeoms.electrode && <Electrode yBase={t1} dir={1} faceRmm={faceR} />}
-      {!partGeoms.electrode && <Electrode yBase={-t2} dir={-1} faceRmm={faceR} />}
-      {partGeoms.electrode && (
-        <mesh geometry={partGeoms.electrode}>
+      {/* Điện cực trên */}
+      {partGeoms.electrode_upper ? (
+        <mesh geometry={partGeoms.electrode_upper}>
           <meshStandardMaterial color="#b87333" metalness={0.85} roughness={0.3} />
+        </mesh>
+      ) : (
+        <Electrode yBase={t1} dir={1} faceRmm={faceR} />
+      )}
+      {/* Điện cực dưới */}
+      {partGeoms.electrode_lower ? (
+        <mesh geometry={partGeoms.electrode_lower}>
+          <meshStandardMaterial color="#b87333" metalness={0.85} roughness={0.3} />
+        </mesh>
+      ) : (
+        <Electrode yBase={-t2} dir={-1} faceRmm={faceR} />
+      )}
+      {partGeoms.fixture && (
+        <mesh geometry={partGeoms.fixture}>
+          <meshStandardMaterial color="#9aa6b2" metalness={0.7} roughness={0.35} />
         </mesh>
       )}
       {partGeoms.fixture && (

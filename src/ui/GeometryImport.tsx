@@ -2,12 +2,11 @@ import { useState } from 'react';
 import { useStore, type MeshRole } from '../state/store';
 import { loadStep } from '../cad/stepLoader';
 
-// Nạp file STEP cho 3 vai trò: linh kiện 1, linh kiện 2, điện cực.
-
 const ROLES: { role: MeshRole; label: string }[] = [
   { role: 'part1', label: 'Linh kiện 1' },
   { role: 'part2', label: 'Linh kiện 2' },
-  { role: 'electrode', label: 'Điện cực' },
+  { role: 'electrode_upper', label: 'Điện cực trên' },
+  { role: 'electrode_lower', label: 'Điện cực dưới' },
   { role: 'fixture', label: 'Linh kiện gá vào điện cực' },
 ];
 
@@ -68,9 +67,6 @@ export function GeometryImport() {
         })}
       </div>
       {error && <p className="text-xs text-rose-300">{error}</p>}
-      <p className="text-[11px] text-white/40">
-        Chưa nạp STEP → hiển thị hình tham số (tấm + điện cực) theo kích thước đã nhập. Đơn vị STEP mặc định mm.
-      </p>
     </div>
   );
 }
