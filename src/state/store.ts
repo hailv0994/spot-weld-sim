@@ -28,6 +28,12 @@ import { simulateThermal, type ThermalResult } from '../physics/thermalSolver';
 
 export type MeshRole = 'part1' | 'part2' | 'electrode_upper' | 'electrode_lower' | 'fixture';
 
+/** Offset vị trí (mm) và góc xoay (rad) của từng linh kiện trong viewport 3D. */
+export interface PartTransform {
+  position: [number, number, number];
+  rotation: [number, number, number];
+}
+
 interface LoadedGeometryMesh {
   /** Tên file gốc */
   name: string;
@@ -74,6 +80,19 @@ interface AppState {
   thermalFrame: number;
   thermalRunning: boolean;
 
+  /** Vị trí/xoay từng linh kiện trong viewport 3D (mm + rad). */
+  partTransforms: Partial<Record<MeshRole, PartTransform>>;
+  /** Linh kiện bị cố định (không kéo được). Mặc định: part2. */
+  fixedParts: MeshRole[];
+  /** Linh kiện đang được chọn để transform. */
+  selectedPart: MeshRole | null;
+  /** Chế độ transform: dịch chuyển hoặc xoay. */
+  transformMode: 'translate' | 'rotate';
+  /** Khoảng cách 2 linh kiện TRƯỚC hàn (mm). 0 = chưa đặt. */
+  weldGapBefore: number;
+  /** Khoảng cách 2 linh kiện SAU hàn (yêu cầu, mm). 0 = chưa đặt. */
+  weldGapAfter: number;
+
   // actions
   setMat1: (m: Partial<Material>) => void;
   setMat2: (m: Partial<Material>) => void;
@@ -89,6 +108,11 @@ interface AppState {
   registerMesh: (m: LoadedGeometryMesh) => void;
   setPartGeom: (role: MeshRole, geom: BufferGeometry | undefined, name?: string) => void;
   setPartDrawing: (role: MeshRole, doc: PartDrawing | undefined) => void;
+  setPartTransform: (role: MeshRole, t: PartTransform) => void;
+  toggleFixed: (role: MeshRole) => void;
+  setSelectedPart: (role: MeshRole | null) => void;
+  setTransformMode: (m: 'translate' | 'rotate') => void;
+  setWeldGap: (before: number, after: number) => void;
 
   runOptimize: () => void;
   runManual: () => void;
@@ -97,12 +121,20 @@ interface AppState {
 }
 
 function inputsOf(s: AppState): SimInputs {
+  // Setdown từ khoảng cách trước/sau hàn → penetration mục tiêu
+  let requirement = s.requirement;
+  if (s.weldGapBefore > 0 && s.weldGapAfter > 0 && s.weldGapBefore > s.weldGapAfter) {
+    const setdownM = (s.weldGapBefore - s.weldGapAfter) / 1000;
+    const thinner = Math.min(s.geom.thickness1, s.geom.thickness2);
+    const minPen = thinner > 0 ? Math.min(0.95, setdownM / thinner) : 0.3;
+    requirement = { ...s.requirement, minPenetration: minPen, targetNuggetDiameter: 0, requiredTensileForce: 0 };
+  }
   return {
     mat1: s.mat1,
     mat2: s.mat2,
     electrodeMat: s.matElectrode,
     geom: s.geom,
-    requirement: s.requirement,
+    requirement,
     coeffs: s.coeffs,
   };
 }
@@ -124,6 +156,12 @@ export const useStore = create<AppState>((set, get) => ({
   thermal: null,
   thermalFrame: 0,
   thermalRunning: false,
+  partTransforms: {},
+  fixedParts: ['part2'],
+  selectedPart: null,
+  transformMode: 'translate',
+  weldGapBefore: 0,
+  weldGapAfter: 0,
 
   setMat1: (m) => set((s) => ({ mat1: { ...s.mat1, ...m } })),
   setMat2: (m) => set((s) => ({ mat2: { ...s.mat2, ...m } })),
@@ -154,11 +192,22 @@ export const useStore = create<AppState>((set, get) => ({
     set((s) => {
       const partDrawings = { ...s.partDrawings };
       const prev = partDrawings[role];
-      if (prev) URL.revokeObjectURL(prev.url); // tránh rò rỉ object URL cũ
+      if (prev) URL.revokeObjectURL(prev.url);
       if (doc) partDrawings[role] = doc;
       else delete partDrawings[role];
       return { partDrawings };
     }),
+  setPartTransform: (role, t) =>
+    set((s) => ({ partTransforms: { ...s.partTransforms, [role]: t } })),
+  toggleFixed: (role) =>
+    set((s) => ({
+      fixedParts: s.fixedParts.includes(role)
+        ? s.fixedParts.filter((r) => r !== role)
+        : [...s.fixedParts, role],
+    })),
+  setSelectedPart: (role) => set({ selectedPart: role }),
+  setTransformMode: (m) => set({ transformMode: m }),
+  setWeldGap: (before, after) => set({ weldGapBefore: before, weldGapAfter: after }),
 
   runOptimize: () => {
     const s = get();

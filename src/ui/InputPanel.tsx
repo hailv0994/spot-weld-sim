@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useStore } from '../state/store';
 import { MaterialEditor } from './MaterialEditor';
 import { NumberField, SelectField } from './fields';
@@ -76,18 +76,7 @@ export function InputPanel() {
         <div className="section-title">③ Yêu cầu sản phẩm</div>
         <div className="card space-y-3">
           <DrawingRequirements />
-          <div className="grid grid-cols-2 gap-2 border-t border-white/10 pt-2">
-            <NumberField label="Đ.kính nugget mục tiêu (0=tự tính 4√t)" unit="mm"
-              decimals={2} step={0.1}
-              value={s.requirement.targetNuggetDiameter * 1000}
-              onChange={(v) => s.setRequirement({ targetNuggetDiameter: v / 1000 })} />
-            <NumberField label="Độ ngấu tối thiểu" unit="%" step={5}
-              value={s.requirement.minPenetration * 100}
-              onChange={(v) => s.setRequirement({ minPenetration: v / 100 })} />
-            <NumberField label="Lực kéo phá hủy yêu cầu" unit="kN" decimals={2} step={0.1}
-              value={s.requirement.requiredTensileForce / 1000}
-              onChange={(v) => s.setRequirement({ requiredTensileForce: v * 1000 })} />
-          </div>
+          <WeldGapSection />
         </div>
       </section>
 
@@ -118,6 +107,45 @@ export function InputPanel() {
 
       {/* AI trích xuất từ bản vẽ */}
       <SpecImport />
+    </div>
+  );
+}
+
+// ─── Khoảng cách hàn → setdown → penetration ─────────────────────────────────
+
+function WeldGapSection() {
+  const { weldGapBefore, weldGapAfter, setWeldGap, geom } = useStore();
+
+  const setdown = weldGapBefore > 0 && weldGapAfter > 0 ? weldGapBefore - weldGapAfter : null;
+  const thinner = Math.min(geom.thickness1, geom.thickness2) * 1000; // mm
+  const penetrationPct = setdown !== null && thinner > 0 ? Math.min(95, (setdown / thinner) * 100) : null;
+
+  const setBefore = useCallback((v: number) => setWeldGap(v, weldGapAfter), [setWeldGap, weldGapAfter]);
+  const setAfter = useCallback((v: number) => setWeldGap(weldGapBefore, v), [setWeldGap, weldGapBefore]);
+
+  return (
+    <div className="space-y-2 border-t border-white/10 pt-2">
+      <div className="text-[11px] text-white/50">Khoảng cách 2 linh kiện (đo tại điểm tham chiếu)</div>
+      <div className="grid grid-cols-2 gap-2">
+        <NumberField label="Trước hàn" unit="mm" decimals={2} step={0.1}
+          value={weldGapBefore} onChange={setBefore} />
+        <NumberField label="Sau hàn (yêu cầu)" unit="mm" decimals={2} step={0.1}
+          value={weldGapAfter} onChange={setAfter} />
+      </div>
+      {setdown !== null && setdown > 0 && (
+        <div className="flex gap-3 rounded bg-sky-500/10 px-3 py-1.5 text-[11px]">
+          <span className="text-white/60">Setdown: <strong className="text-sky-300">{setdown.toFixed(3)} mm</strong></span>
+          {penetrationPct !== null && (
+            <span className="text-white/60">→ Độ ngấu mục tiêu: <strong className="text-sky-300">{penetrationPct.toFixed(1)}%</strong></span>
+          )}
+        </div>
+      )}
+      {setdown !== null && setdown <= 0 && (
+        <p className="text-[11px] text-amber-300">Khoảng cách sau hàn phải nhỏ hơn trước hàn.</p>
+      )}
+      <p className="text-[11px] text-white/30">
+        Setdown = trước − sau → dùng để tính độ ngấu mục tiêu khi tối ưu. 0 = không đặt ràng buộc.
+      </p>
     </div>
   );
 }
