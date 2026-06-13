@@ -117,6 +117,11 @@ export function WeldStack() {
           <meshStandardMaterial color="#9aa6b2" metalness={0.7} roughness={0.35} />
         </mesh>
       )}
+      {partGeoms.fixture && (
+        <mesh geometry={partGeoms.fixture}>
+          <meshStandardMaterial color="#9aa6b2" metalness={0.7} roughness={0.35} />
+        </mesh>
+      )}
       <Nugget diameterMm={nuggetD} heightMm={nuggetH} />
     </group>
   );
