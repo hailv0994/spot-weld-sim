@@ -1,6 +1,6 @@
 import { useRef, useCallback, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
-import { OrbitControls, Grid, TransformControls, Html } from '@react-three/drei';
+import { OrbitControls, Grid, TransformControls } from '@react-three/drei';
 import * as THREE from 'three';
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
 import { WeldStack, type WeldStackHandles } from './WeldStack';
@@ -206,8 +206,13 @@ function AssemblyPanel({ onMate }: PanelProps) {
 
 // ─── Scene bên trong Canvas ───────────────────────────────────────────────────
 
-function Scene({ orbitRef }: { orbitRef: React.RefObject<OrbitControlsImpl> }) {
-  const stackRef = useRef<WeldStackHandles>(null);
+function Scene({
+  orbitRef,
+  stackRef,
+}: {
+  orbitRef: React.RefObject<OrbitControlsImpl>;
+  stackRef: React.RefObject<WeldStackHandles>;
+}) {
   const { selectedPart, fixedParts, transformMode, weldPhase, setPartTransform } = useStore();
 
   const isAnimating = weldPhase !== 'idle' && weldPhase !== 'done';
@@ -227,33 +232,6 @@ function Scene({ orbitRef }: { orbitRef: React.RefObject<OrbitControlsImpl> }) {
       });
     }
   }, [selectedPart, selectedGroup, setPartTransform]);
-
-  // ── Mate callback (cần bounding box từ Three.js objects) ──
-  const handleMate = useCallback((movingRole: MeshRole, anchorRole: MeshRole) => {
-    const movingGroup = stackRef.current?.getGroupRef(movingRole);
-    const anchorGroup = stackRef.current?.getGroupRef(anchorRole);
-    if (!movingGroup || !anchorGroup) return;
-
-    const movingBox = new THREE.Box3().setFromObject(movingGroup);
-    const anchorBox = new THREE.Box3().setFromObject(anchorGroup);
-
-    // Căn mặt gần nhất theo Y
-    const movingCenter = movingGroup.position.y;
-    const anchorCenter = anchorGroup.position.y;
-    let newY: number;
-    if (movingCenter >= anchorCenter) {
-      // Moving phía trên → snap đáy moving = đỉnh anchor
-      newY = movingGroup.position.y + (anchorBox.max.y - movingBox.min.y);
-    } else {
-      // Moving phía dưới → snap đỉnh moving = đáy anchor
-      newY = movingGroup.position.y + (anchorBox.min.y - movingBox.max.y);
-    }
-    movingGroup.position.y = newY;
-    setPartTransform(movingRole, {
-      position: [movingGroup.position.x, newY, movingGroup.position.z],
-      rotation: [movingGroup.rotation.x, movingGroup.rotation.y, movingGroup.rotation.z],
-    });
-  }, [setPartTransform]);
 
   return (
     <>
@@ -293,11 +271,6 @@ function Scene({ orbitRef }: { orbitRef: React.RefObject<OrbitControlsImpl> }) {
 
       <OrbitControls ref={orbitRef} makeDefault target={[0, 0, 0]}
         maxDistance={500} minDistance={2} />
-
-      {/* Panel HTML đặt trong Canvas để truy cập callback handleMate */}
-      <Html fullscreen>
-        <AssemblyPanel onMate={handleMate} />
-      </Html>
     </>
   );
 }
@@ -306,18 +279,49 @@ function Scene({ orbitRef }: { orbitRef: React.RefObject<OrbitControlsImpl> }) {
 
 export function WeldScene() {
   const orbitRef = useRef<OrbitControlsImpl>(null);
+  const stackRef = useRef<WeldStackHandles>(null);
+  const setPartTransform = useStore((s) => s.setPartTransform);
+
+  // ── Mate: snap mặt tiếp xúc theo Y, dùng bounding box Three.js ──
+  const handleMate = useCallback((movingRole: MeshRole, anchorRole: MeshRole) => {
+    const movingGroup = stackRef.current?.getGroupRef(movingRole);
+    const anchorGroup = stackRef.current?.getGroupRef(anchorRole);
+    if (!movingGroup || !anchorGroup) return;
+
+    const movingBox = new THREE.Box3().setFromObject(movingGroup);
+    const anchorBox = new THREE.Box3().setFromObject(anchorGroup);
+
+    const movingCenter = movingGroup.position.y;
+    const anchorCenter = anchorGroup.position.y;
+    let newY: number;
+    if (movingCenter >= anchorCenter) {
+      newY = movingGroup.position.y + (anchorBox.max.y - movingBox.min.y);
+    } else {
+      newY = movingGroup.position.y + (anchorBox.min.y - movingBox.max.y);
+    }
+    movingGroup.position.y = newY;
+    setPartTransform(movingRole, {
+      position: [movingGroup.position.x, newY, movingGroup.position.z],
+      rotation: [movingGroup.rotation.x, movingGroup.rotation.y, movingGroup.rotation.z],
+    });
+  }, [setPartTransform]);
 
   return (
-    <Canvas
-      frameloop="always"
-      dpr={[1, 2]}
-      camera={{ position: [22, 16, 28], fov: 42, near: 0.1, far: 2000 }}
-      shadows
-    >
-      {/* Nền sáng xanh xám nhạt */}
-      <color attach="background" args={['#d6e4ee']} />
-      <fog attach="fog" args={['#d6e4ee', 120, 400]} />
-      <Scene orbitRef={orbitRef} />
-    </Canvas>
+    <div className="relative h-full w-full">
+      <Canvas
+        frameloop="always"
+        dpr={[1, 2]}
+        camera={{ position: [22, 16, 28], fov: 42, near: 0.1, far: 2000 }}
+        shadows
+      >
+        {/* Nền sáng xanh xám nhạt */}
+        <color attach="background" args={['#d6e4ee']} />
+        <fog attach="fog" args={['#d6e4ee', 120, 400]} />
+        <Scene orbitRef={orbitRef} stackRef={stackRef} />
+      </Canvas>
+
+      {/* Panel điều khiển — DOM thường ngoài Canvas (luôn render) */}
+      <AssemblyPanel onMate={handleMate} />
+    </div>
   );
 }
