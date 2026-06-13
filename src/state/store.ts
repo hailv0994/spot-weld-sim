@@ -34,6 +34,16 @@ interface LoadedGeometryMesh {
   role: MeshRole;
 }
 
+/** Bản vẽ 2D (PDF/ảnh) của một linh kiện — chỉ để hiển thị tham khảo. */
+export interface PartDrawing {
+  /** Tên file gốc */
+  name: string;
+  /** Object URL để render trong trình duyệt */
+  url: string;
+  /** MIME type (application/pdf hoặc image/*) */
+  type: string;
+}
+
 interface AppState {
   mat1: Material;
   mat2: Material;
@@ -53,6 +63,8 @@ interface AppState {
   loadedMeshes: LoadedGeometryMesh[];
   /** Geometry STEP đã nạp theo vai trò (mm-scale). Không có → dùng hình tham số. */
   partGeoms: Partial<Record<MeshRole, BufferGeometry>>;
+  /** Bản vẽ 2D (PDF/ảnh) đã nạp theo vai trò. */
+  partDrawings: Partial<Record<MeshRole, PartDrawing>>;
 
   /** Kết quả solver nhiệt + khung đang xem */
   thermal: ThermalResult | null;
@@ -71,6 +83,7 @@ interface AppState {
   setManualParams: (p: Partial<WeldParameters>) => void;
   registerMesh: (m: LoadedGeometryMesh) => void;
   setPartGeom: (role: MeshRole, geom: BufferGeometry | undefined, name?: string) => void;
+  setPartDrawing: (role: MeshRole, doc: PartDrawing | undefined) => void;
 
   runOptimize: () => void;
   runManual: () => void;
@@ -100,6 +113,7 @@ export const useStore = create<AppState>((set, get) => ({
   manualResult: null,
   loadedMeshes: [],
   partGeoms: {},
+  partDrawings: {},
   thermal: null,
   thermalFrame: 0,
   thermalRunning: false,
@@ -126,6 +140,15 @@ export const useStore = create<AppState>((set, get) => ({
         ? [...s.loadedMeshes.filter((x) => x.role !== role), { role, name }]
         : s.loadedMeshes.filter((x) => x.role !== role);
       return { partGeoms, loadedMeshes };
+    }),
+  setPartDrawing: (role, doc) =>
+    set((s) => {
+      const partDrawings = { ...s.partDrawings };
+      const prev = partDrawings[role];
+      if (prev) URL.revokeObjectURL(prev.url); // tránh rò rỉ object URL cũ
+      if (doc) partDrawings[role] = doc;
+      else delete partDrawings[role];
+      return { partDrawings };
     }),
 
   runOptimize: () => {

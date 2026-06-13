@@ -1,10 +1,13 @@
+import { useState } from 'react';
 import { InputPanel } from './ui/InputPanel';
 import { ResultsPanel } from './ui/ResultsPanel';
 import { GeometryImport } from './ui/GeometryImport';
+import { DrawingImport } from './ui/DrawingImport';
 import { WeldScene } from './viz/WeldScene';
 import { ThermalSection } from './viz/ThermalSection';
 
 export default function App() {
+  const [viewMode, setViewMode] = useState<'3d' | '2d'>('3d');
   return (
     <div className="mx-auto flex min-h-full max-w-[1600px] flex-col">
       <header className="flex items-center justify-between border-b border-white/10 px-6 py-3">
@@ -29,13 +32,39 @@ export default function App() {
         <div className="space-y-6 lg:max-h-[calc(100vh-90px)] lg:overflow-y-auto">
           <ResultsPanel />
 
-          {/* Viewer 3D (Phase 2) */}
+          {/* Viewer cụm hàn — 3D (STEP) hoặc bản vẽ 2D (PDF) (Phase 2) */}
           <section className="card space-y-3">
-            <div className="section-title mb-0">Viewer 3D — cụm hàn</div>
-            <GeometryImport />
-            <div className="h-[420px] overflow-hidden rounded-lg border border-white/10">
-              <WeldScene />
+            <div className="flex items-center justify-between">
+              <div className="section-title mb-0">Viewer — cụm hàn</div>
+              <div className="flex gap-1 rounded bg-black/30 p-0.5 text-xs">
+                <button
+                  className={`rounded px-2 py-1 ${
+                    viewMode === '3d' ? 'bg-sky-500/30 text-sky-200' : 'text-white/50 hover:text-white/80'
+                  }`}
+                  onClick={() => setViewMode('3d')}
+                >
+                  3D (STEP)
+                </button>
+                <button
+                  className={`rounded px-2 py-1 ${
+                    viewMode === '2d' ? 'bg-sky-500/30 text-sky-200' : 'text-white/50 hover:text-white/80'
+                  }`}
+                  onClick={() => setViewMode('2d')}
+                >
+                  Bản vẽ 2D (PDF)
+                </button>
+              </div>
             </div>
+            {viewMode === '3d' ? (
+              <>
+                <GeometryImport />
+                <div className="h-[420px] overflow-hidden rounded-lg border border-white/10">
+                  <WeldScene />
+                </div>
+              </>
+            ) : (
+              <DrawingImport />
+            )}
           </section>
 
           {/* Animation nhiệt (Phase 3) */}
