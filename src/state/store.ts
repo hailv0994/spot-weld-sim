@@ -26,7 +26,7 @@ import { simulateThermal, type ThermalResult } from '../physics/thermalSolver';
 // Store trung tâm: toàn bộ input + kết quả. UI đọc/ghi qua các action.
 // ============================================================================
 
-export type MeshRole = 'part1' | 'part2' | 'electrode' | 'fixture';
+export type MeshRole = 'part1' | 'part2' | 'electrode_upper' | 'electrode_lower' | 'fixture';
 
 interface LoadedGeometryMesh {
   /** Tên file gốc */

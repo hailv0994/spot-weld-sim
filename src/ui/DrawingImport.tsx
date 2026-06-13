@@ -7,7 +7,8 @@ import { useStore, type MeshRole } from '../state/store';
 const ROLES: { role: MeshRole; label: string }[] = [
   { role: 'part1', label: 'Linh kiện 1' },
   { role: 'part2', label: 'Linh kiện 2' },
-  { role: 'electrode', label: 'Điện cực' },
+  { role: 'electrode_upper', label: 'Điện cực trên' },
+  { role: 'electrode_lower', label: 'Điện cực dưới' },
 ];
 
 export function DrawingImport() {
