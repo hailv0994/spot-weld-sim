@@ -8,6 +8,7 @@ const ROLES: { role: MeshRole; label: string }[] = [
   { role: 'part1', label: 'Linh kiện 1' },
   { role: 'part2', label: 'Linh kiện 2' },
   { role: 'electrode', label: 'Điện cực' },
+  { role: 'fixture', label: 'Linh kiện gá vào điện cực' },
 ];
 
 export function GeometryImport() {
@@ -31,7 +32,7 @@ export function GeometryImport() {
 
   return (
     <div className="space-y-2">
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-2 gap-2">
         {ROLES.map(({ role, label }) => {
           const loaded = loadedMeshes.find((m) => m.role === role);
           return (

@@ -11,8 +11,9 @@ import { getPreset } from './materials';
 // Chọn theo một mối hàn thép tấm 1mm điển hình để app chạy ra kết quả hợp lý ngay.
 // ============================================================================
 
-export const DEFAULT_MATERIAL_1 = getPreset('low-carbon-steel')!;
-export const DEFAULT_MATERIAL_2 = getPreset('low-carbon-steel')!;
+export const DEFAULT_MATERIAL_1 = getPreset('spcc')!;
+export const DEFAULT_MATERIAL_2 = getPreset('spcc')!;
+export const DEFAULT_MATERIAL_ELECTRODE = getPreset('cu-cr-zr')!;
 
 export const DEFAULT_GEOMETRY: Geometry = {
   thickness1: 1.0e-3, // 1.0 mm

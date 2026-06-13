@@ -1,9 +1,10 @@
-import { useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { Material } from '../physics/types';
-import { searchMaterials, getPreset } from '../physics/materials';
+import { getPreset } from '../physics/materials';
 import { NumberField } from './fields';
 
-// Nhập mã vật liệu → tự điền thông số. Vẫn sửa tay từng trường nếu cần.
+// Nhập mã vật liệu → khớp chính xác trong CSDL thì tự điền thông số.
+// Không gợi ý; user tự điền mã. Vẫn mở "Chi tiết" để sửa tay nếu cần.
 
 interface Props {
   title: string;
@@ -12,30 +13,30 @@ interface Props {
   onReplace: (m: Material) => void;
 }
 
+type MatchState = 'idle' | 'matched' | 'notfound';
+
 export function MaterialEditor({ title, mat, onPatch, onReplace }: Props) {
-  const [query, setQuery] = useState(mat.id);
-  const [open, setOpen] = useState(false);
+  const [code, setCode] = useState(mat.id);
+  const [match, setMatch] = useState<MatchState>('idle');
   const [showDetail, setShowDetail] = useState(false);
-  const blurTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const suggestions = searchMaterials(query).slice(0, 8);
+  // Đồng bộ ô mã khi vật liệu bị thay từ ngoài (preset/AI).
+  useEffect(() => setCode(mat.id), [mat.id]);
 
-  function select(id: string) {
-    const p = getPreset(id);
-    if (!p) return;
-    onReplace(p);
-    setQuery(p.id);
-    setOpen(false);
-  }
-
-  function onBlur() {
-    // Delay để click vào suggestion kịp xử lý trước khi đóng
-    blurTimer.current = setTimeout(() => setOpen(false), 150);
-  }
-
-  function onFocus() {
-    if (blurTimer.current) clearTimeout(blurTimer.current);
-    setOpen(true);
+  function apply(raw: string) {
+    setCode(raw);
+    const key = raw.trim().toLowerCase();
+    if (!key) {
+      setMatch('idle');
+      return;
+    }
+    const p = getPreset(key);
+    if (p) {
+      onReplace(p);
+      setMatch('matched');
+    } else {
+      setMatch('notfound');
+    }
   }
 
   return (
@@ -50,41 +51,26 @@ export function MaterialEditor({ title, mat, onPatch, onReplace }: Props) {
         </button>
       </div>
 
-      {/* Ô tìm kiếm mã vật liệu */}
-      <div className="relative">
+      {/* Ô nhập mã vật liệu */}
+      <label className="block">
+        <span className="field-label">Mã vật liệu</span>
         <input
-          className="field-input w-full pr-6"
-          placeholder="Nhập mã: SPCC, DP980, SUS304, Al6061…"
-          value={query}
-          onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
-          onFocus={onFocus}
-          onBlur={onBlur}
+          className="field-input w-full font-mono uppercase"
+          placeholder="VD: SPCC, DP980, SUS304, AL6061-T6"
+          value={code}
+          onChange={(e) => apply(e.target.value)}
           spellCheck={false}
         />
-        {query && (
-          <button
-            className="absolute right-2 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/70"
-            onMouseDown={(e) => { e.preventDefault(); setQuery(''); setOpen(true); }}
-          >
-            ✕
-          </button>
-        )}
-        {open && suggestions.length > 0 && (
-          <ul className="absolute z-20 mt-1 w-full rounded border border-white/10 bg-[#1a2030] shadow-xl">
-            {suggestions.map((m) => (
-              <li key={m.id}>
-                <button
-                  className="flex w-full items-baseline gap-2 px-3 py-1.5 text-left hover:bg-white/10"
-                  onMouseDown={(e) => { e.preventDefault(); select(m.id); }}
-                >
-                  <span className="font-mono text-xs font-semibold text-sky-300">{m.id.toUpperCase()}</span>
-                  <span className="truncate text-[11px] text-white/50">{m.name}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
+      </label>
+
+      {match === 'matched' && (
+        <p className="text-[11px] text-emerald-300">✓ Đã nhận dạng — tự điền thông số từ CSDL.</p>
+      )}
+      {match === 'notfound' && (
+        <p className="text-[11px] text-amber-300">
+          Mã không có trong CSDL — mở “Chi tiết” để nhập thông số thủ công.
+        </p>
+      )}
 
       {/* Badge tóm tắt vật liệu đang chọn */}
       <div className="flex flex-wrap gap-2 text-[11px] text-white/60">

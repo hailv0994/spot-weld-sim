@@ -186,15 +186,6 @@ export function getPreset(id: string): Material | undefined {
   return p ? { ...p } : undefined;
 }
 
-/** Tìm kiếm theo mã hoặc tên (case-insensitive, tìm chuỗi con). */
-export function searchMaterials(query: string): Material[] {
-  const q = query.trim().toLowerCase();
-  if (!q) return MATERIAL_PRESETS;
-  return MATERIAL_PRESETS.filter(
-    (m) => m.id.toLowerCase().includes(q) || m.name.toLowerCase().includes(q),
-  );
-}
-
 /** Điện trở suất phụ thuộc nhiệt độ: ρ(T) = ρ20·(1 + α·(T − T_room)). */
 export function resistivityAt(mat: Material, tempK: number, roomK = 293.15): number {
   return mat.resistivity20 * (1 + mat.resistivityTempCoeff * (tempK - roomK));

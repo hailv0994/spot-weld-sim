@@ -11,6 +11,7 @@ import type {
 import {
   DEFAULT_MATERIAL_1,
   DEFAULT_MATERIAL_2,
+  DEFAULT_MATERIAL_ELECTRODE,
   DEFAULT_GEOMETRY,
   DEFAULT_MACHINE,
   DEFAULT_REQUIREMENT,
@@ -25,7 +26,7 @@ import { simulateThermal, type ThermalResult } from '../physics/thermalSolver';
 // Store trung tâm: toàn bộ input + kết quả. UI đọc/ghi qua các action.
 // ============================================================================
 
-export type MeshRole = 'part1' | 'part2' | 'electrode';
+export type MeshRole = 'part1' | 'part2' | 'electrode' | 'fixture';
 
 interface LoadedGeometryMesh {
   /** Tên file gốc */
@@ -47,6 +48,8 @@ export interface PartDrawing {
 interface AppState {
   mat1: Material;
   mat2: Material;
+  /** Vật liệu điện cực */
+  matElectrode: Material;
   geom: Geometry;
   machine: MachineSpec;
   requirement: ProductRequirement;
@@ -74,8 +77,10 @@ interface AppState {
   // actions
   setMat1: (m: Partial<Material>) => void;
   setMat2: (m: Partial<Material>) => void;
+  setMatElectrode: (m: Partial<Material>) => void;
   replaceMat1: (m: Material) => void;
   replaceMat2: (m: Material) => void;
+  replaceMatElectrode: (m: Material) => void;
   setGeom: (g: Partial<Geometry>) => void;
   setMachine: (s: Partial<MachineSpec>) => void;
   setRequirement: (r: Partial<ProductRequirement>) => void;
@@ -95,6 +100,7 @@ function inputsOf(s: AppState): SimInputs {
   return {
     mat1: s.mat1,
     mat2: s.mat2,
+    electrodeMat: s.matElectrode,
     geom: s.geom,
     requirement: s.requirement,
     coeffs: s.coeffs,
@@ -104,6 +110,7 @@ function inputsOf(s: AppState): SimInputs {
 export const useStore = create<AppState>((set, get) => ({
   mat1: { ...DEFAULT_MATERIAL_1 },
   mat2: { ...DEFAULT_MATERIAL_2 },
+  matElectrode: { ...DEFAULT_MATERIAL_ELECTRODE },
   geom: { ...DEFAULT_GEOMETRY },
   machine: { ...DEFAULT_MACHINE },
   requirement: { ...DEFAULT_REQUIREMENT },
@@ -120,8 +127,10 @@ export const useStore = create<AppState>((set, get) => ({
 
   setMat1: (m) => set((s) => ({ mat1: { ...s.mat1, ...m } })),
   setMat2: (m) => set((s) => ({ mat2: { ...s.mat2, ...m } })),
+  setMatElectrode: (m) => set((s) => ({ matElectrode: { ...s.matElectrode, ...m } })),
   replaceMat1: (m) => set({ mat1: { ...m } }),
   replaceMat2: (m) => set({ mat2: { ...m } }),
+  replaceMatElectrode: (m) => set({ matElectrode: { ...m } }),
   setGeom: (g) => set((s) => ({ geom: { ...s.geom, ...g } })),
   setMachine: (sp) => set((s) => ({ machine: { ...s.machine, ...sp } })),
   setRequirement: (r) => set((s) => ({ requirement: { ...s.requirement, ...r } })),
@@ -167,7 +176,7 @@ export const useStore = create<AppState>((set, get) => ({
     const s = get();
     // Dùng tham số tối ưu nếu có, nếu không dùng tham số thủ công
     const params = s.recommendation?.params ?? s.manualParams;
-    const thermal = simulateThermal(s.mat1, s.mat2, s.geom, params, s.coeffs);
+    const thermal = simulateThermal(s.mat1, s.mat2, s.geom, params, s.coeffs, {}, s.matElectrode);
     set({ thermal, thermalFrame: 0 });
   },
 
