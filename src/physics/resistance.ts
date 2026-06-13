@@ -23,13 +23,19 @@ export interface ResistanceBreakdown {
   bulk: number;
   contactFaying: number;
   contactElectrode: number;
+  /** Điện trở khối qua 2 điện cực (chỉ tính khi có vật liệu điện cực) */
+  electrodeBulk: number;
   total: number;
 }
+
+/** Chiều dài đường dẫn điện đại diện qua mỗi điện cực (m) — đầu côn tiếp xúc. */
+const ELECTRODE_PATH_LENGTH = 3e-3;
 
 /**
  * Tính điện trở động tại nhiệt độ trung bình tempK và lực ép force.
  * @param mat1 vật liệu tấm 1
  * @param mat2 vật liệu tấm 2
+ * @param electrodeMat vật liệu điện cực (tùy chọn) → thêm điện trở khối 2 điện cực
  */
 export function computeResistance(
   mat1: Material,
@@ -39,6 +45,7 @@ export function computeResistance(
   coeffs: ModelCoeffs,
   tempK = 293.15,
   roomK = 293.15,
+  electrodeMat?: Material,
 ): ResistanceBreakdown {
   const area = electrodeContactArea(geom);
 
@@ -59,6 +66,13 @@ export function computeResistance(
   // 2 mặt điện cực — gộp gần đúng nhỏ hơn faying.
   const contactElectrode = 0.4 * contactFaying;
 
-  const total = bulk + contactFaying + contactElectrode;
-  return { bulk, contactFaying, contactElectrode, total };
+  // Điện trở khối qua 2 điện cực (đồng dẫn điện tốt → nhỏ). Chỉ tính khi biết vật liệu.
+  let electrodeBulk = 0;
+  if (electrodeMat) {
+    const rhoE = resistivityAt(electrodeMat, tempK, roomK);
+    electrodeBulk = (2 * rhoE * ELECTRODE_PATH_LENGTH) / area;
+  }
+
+  const total = bulk + contactFaying + contactElectrode + electrodeBulk;
+  return { bulk, contactFaying, contactElectrode, electrodeBulk, total };
 }

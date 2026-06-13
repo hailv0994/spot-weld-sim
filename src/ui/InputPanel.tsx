@@ -26,6 +26,12 @@ export function InputPanel() {
             onPatch={s.setMat2}
             onReplace={s.replaceMat2}
           />
+          <MaterialEditor
+            title="Điện cực (Cu hợp kim)"
+            mat={s.matElectrode}
+            onPatch={s.setMatElectrode}
+            onReplace={s.replaceMatElectrode}
+          />
         </div>
       </section>
 

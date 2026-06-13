@@ -64,6 +64,7 @@ export function simulateThermal(
   params: WeldParameters,
   coeffs: ModelCoeffs,
   opts: ThermalOptions = {},
+  electrodeMat?: Material,
 ): ThermalResult {
   const Nr = opts.Nr ?? 46;
   const Nz = opts.Nz ?? 48;
@@ -97,7 +98,7 @@ export function simulateThermal(
   const meltK = (mat1.meltingPoint + mat2.meltingPoint) / 2;
 
   // Công suất Joule. Điện trở tại nhiệt phòng (giữ hằng cho ổn định số).
-  const Rtot = computeResistance(mat1, mat2, geom, params.force, coeffs, roomK, roomK).total;
+  const Rtot = computeResistance(mat1, mat2, geom, params.force, coeffs, roomK, roomK, electrodeMat).total;
   const power = instantaneousPower(params.current, Rtot); // W
 
   // Nguồn thể tích trong cột r < rElec, toàn chiều dày, trong thời gian hàn.

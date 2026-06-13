@@ -18,6 +18,8 @@ import { predictTensileForce } from './mechanical';
 export interface SimInputs {
   mat1: Material;
   mat2: Material;
+  /** Vật liệu điện cực (tùy chọn) — ảnh hưởng điện trở khối điện cực */
+  electrodeMat?: Material;
   geom: Geometry;
   requirement: ProductRequirement;
   coeffs: ModelCoeffs;
@@ -48,9 +50,9 @@ export function targetNugget(inputs: SimInputs): number {
 }
 
 export function simulate(inputs: SimInputs, params: WeldParameters): WeldResult {
-  const { mat1, mat2, geom, requirement, coeffs } = inputs;
+  const { mat1, mat2, electrodeMat, geom, requirement, coeffs } = inputs;
 
-  const R = computeResistance(mat1, mat2, geom, params.force, coeffs);
+  const R = computeResistance(mat1, mat2, geom, params.force, coeffs, 293.15, 293.15, electrodeMat);
   const Q = jouleHeat(params.current, R.total, params.weldTime);
   const Qeff = effectiveHeat(Q, coeffs);
 
