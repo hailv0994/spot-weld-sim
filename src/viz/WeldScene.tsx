@@ -1,16 +1,216 @@
-import { useRef, useCallback } from 'react';
+import { useRef, useCallback, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
-import { OrbitControls, Grid, TransformControls } from '@react-three/drei';
+import { OrbitControls, Grid, TransformControls, Html } from '@react-three/drei';
+import * as THREE from 'three';
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
 import { WeldStack, type WeldStackHandles } from './WeldStack';
+import { WeldAnimation } from './WeldAnimation';
 import { useStore, type MeshRole } from '../state/store';
 
-// ─── Scene (inside Canvas) ────────────────────────────────────────────────────
+// ─── Panel HTML (trong Canvas qua <Html fullscreen>) ──────────────────────────
+
+const PART_LABELS: [MeshRole, string][] = [
+  ['part1', 'Linh kiện 1'],
+  ['part2', 'Linh kiện 2'],
+  ['electrode_upper', 'Điện cực trên'],
+  ['electrode_lower', 'Điện cực dưới'],
+  ['fixture', 'Gá đỡ'],
+];
+
+interface PanelProps {
+  onMate: (moving: MeshRole, anchor: MeshRole) => void;
+}
+
+function AssemblyPanel({ onMate }: PanelProps) {
+  const {
+    selectedPart, fixedParts, transformMode, weldPhase,
+    preWeldTransforms, postWeldTransforms, blocks,
+    setSelectedPart, toggleFixed, setTransformMode,
+    savePreWeld, savePostWeld,
+    addBlock, clearBlocks,
+    startWeldAnim, resetWeldAnim,
+    thermal, thermalFrame,
+  } = useStore();
+
+  const [mateMoving, setMateMoving] = useState<MeshRole>('electrode_upper');
+  const [mateAnchor, setMateAnchor] = useState<MeshRole>('part1');
+  const [blockA, setBlockA] = useState<MeshRole>('electrode_upper');
+  const [blockB, setBlockB] = useState<MeshRole>('part1');
+
+  const isAnimating = weldPhase !== 'idle' && weldPhase !== 'done';
+  const hasPreWeld = Object.keys(preWeldTransforms).length > 0;
+  const hasPostWeld = Object.keys(postWeldTransforms).length > 0;
+
+  const tf = thermal?.frames[thermalFrame];
+  const meltD = tf ? (tf.meltRadius * 2 * 1000).toFixed(2) : '—';
+  const peakT = tf ? Math.round(tf.peak - 273.15) : null;
+
+  const phaseLabel: Record<string, string> = {
+    idle: '⏸ Chờ',
+    approach: '⬇ Tiếp cận',
+    welding: '⚡ Đang hàn',
+    done: '✓ Hoàn thành',
+  };
+
+  return (
+    <div className="pointer-events-none absolute inset-0 z-10 flex">
+
+      {/* ── Panel trái: setup lắp ghép ── */}
+      <div className="pointer-events-auto m-2 flex w-48 flex-col gap-2 self-start rounded-xl bg-white/90 p-2 shadow-xl ring-1 ring-black/10 backdrop-blur text-[11px]">
+
+        {/* Transform mode */}
+        <div className="flex gap-1 rounded-lg bg-slate-100 p-0.5">
+          {(['translate', 'rotate'] as const).map((m) => (
+            <button key={m} onClick={() => setTransformMode(m)} disabled={isAnimating}
+              className={`flex-1 rounded py-0.5 font-medium transition-colors ${transformMode === m ? 'bg-white shadow text-sky-700' : 'text-slate-400 hover:text-slate-600'} disabled:opacity-40`}>
+              {m === 'translate' ? '⇥ Move' : '↻ Rotate'}
+            </button>
+          ))}
+        </div>
+
+        {/* Danh sách linh kiện */}
+        <div className="space-y-0.5">
+          <div className="px-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">Linh kiện</div>
+          {PART_LABELS.map(([role, label]) => {
+            const isFixed = fixedParts.includes(role);
+            const isSelected = selectedPart === role;
+            const inBlock = blocks.some((bl) => bl.includes(role));
+            return (
+              <div key={role}
+                className={`flex items-center gap-1 rounded-lg px-1.5 py-1 cursor-pointer transition-colors ${isSelected ? 'bg-sky-50 ring-1 ring-sky-200' : 'hover:bg-slate-50'}`}
+                onClick={() => setSelectedPart(isSelected ? null : role)}>
+                <span className="flex-1 text-slate-700 truncate">{label}</span>
+                {inBlock && <span className="text-[9px] text-purple-400" title="Trong block">⬡</span>}
+                <button
+                  className={`rounded px-1 py-0.5 text-[9px] font-bold transition-colors ${isFixed ? 'bg-rose-100 text-rose-600' : 'bg-emerald-100 text-emerald-700'}`}
+                  onClick={(e) => { e.stopPropagation(); toggleFixed(role); }}
+                  disabled={isAnimating}
+                >
+                  {isFixed ? 'Fix' : 'Move'}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+
+        <hr className="border-slate-200" />
+
+        {/* Mate */}
+        <div className="space-y-1">
+          <div className="px-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">Mate (áp sát)</div>
+          <select value={mateMoving} onChange={(e) => setMateMoving(e.target.value as MeshRole)}
+            className="w-full rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-700">
+            {PART_LABELS.map(([r, l]) => <option key={r} value={r}>{l}</option>)}
+          </select>
+          <div className="text-center text-[9px] text-slate-400">→ tiếp xúc →</div>
+          <select value={mateAnchor} onChange={(e) => setMateAnchor(e.target.value as MeshRole)}
+            className="w-full rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-700">
+            {PART_LABELS.map(([r, l]) => <option key={r} value={r}>{l}</option>)}
+          </select>
+          <button onClick={() => onMate(mateMoving, mateAnchor)} disabled={isAnimating || mateMoving === mateAnchor}
+            className="w-full rounded-lg bg-sky-500 py-1 text-[10px] font-bold text-white transition hover:bg-sky-600 disabled:opacity-40">
+            🔗 Mate!
+          </button>
+        </div>
+
+        <hr className="border-slate-200" />
+
+        {/* Block */}
+        <div className="space-y-1">
+          <div className="px-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">Block (di chuyển cùng)</div>
+          <div className="flex gap-1">
+            <select value={blockA} onChange={(e) => setBlockA(e.target.value as MeshRole)}
+              className="flex-1 rounded bg-slate-100 px-1 py-0.5 text-[9px] text-slate-700">
+              {PART_LABELS.map(([r, l]) => <option key={r} value={r}>{l}</option>)}
+            </select>
+            <select value={blockB} onChange={(e) => setBlockB(e.target.value as MeshRole)}
+              className="flex-1 rounded bg-slate-100 px-1 py-0.5 text-[9px] text-slate-700">
+              {PART_LABELS.map(([r, l]) => <option key={r} value={r}>{l}</option>)}
+            </select>
+          </div>
+          <div className="flex gap-1">
+            <button onClick={() => addBlock(blockA, blockB)} disabled={isAnimating || blockA === blockB}
+              className="flex-1 rounded-lg bg-purple-500 py-1 text-[9px] font-bold text-white transition hover:bg-purple-600 disabled:opacity-40">
+              ⬡ Block
+            </button>
+            <button onClick={clearBlocks} disabled={isAnimating}
+              className="rounded-lg bg-slate-200 px-2 py-1 text-[9px] text-slate-600 hover:bg-slate-300 disabled:opacity-40">
+              ✕
+            </button>
+          </div>
+          {blocks.length > 0 && (
+            <div className="text-[9px] text-slate-400">
+              {blocks.map((bl, i) => <div key={i}>• {bl.join(' + ')}</div>)}
+            </div>
+          )}
+        </div>
+
+        <hr className="border-slate-200" />
+
+        {/* Set vị trí */}
+        <div className="space-y-1">
+          <div className="px-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">Vị trí hàn</div>
+          <button onClick={savePreWeld} disabled={isAnimating}
+            className={`flex w-full items-center gap-1.5 rounded-lg px-2 py-1.5 text-[10px] font-medium transition disabled:opacity-40 ${hasPreWeld ? 'bg-blue-50 text-blue-700 ring-1 ring-blue-200' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+            <span>📌</span>
+            <span className="flex-1 text-left">Vị trí TRƯỚC hàn</span>
+            {hasPreWeld && <span className="text-[9px] text-blue-400">✓</span>}
+          </button>
+          <button onClick={savePostWeld} disabled={isAnimating}
+            className={`flex w-full items-center gap-1.5 rounded-lg px-2 py-1.5 text-[10px] font-medium transition disabled:opacity-40 ${hasPostWeld ? 'bg-orange-50 text-orange-700 ring-1 ring-orange-200' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+            <span>🎯</span>
+            <span className="flex-1 text-left">Vị trí SAU hàn</span>
+            {hasPostWeld && <span className="text-[9px] text-orange-400">✓</span>}
+          </button>
+        </div>
+
+        <hr className="border-slate-200" />
+
+        {/* Simulate */}
+        <div className="space-y-1">
+          <button
+            onClick={startWeldAnim}
+            disabled={isAnimating || !hasPreWeld}
+            className="w-full rounded-lg bg-gradient-to-r from-orange-500 to-rose-500 py-1.5 text-[11px] font-bold text-white shadow transition hover:from-orange-600 hover:to-rose-600 disabled:opacity-40">
+            {isAnimating ? phaseLabel[weldPhase] : '▶ Mô phỏng'}
+          </button>
+          <button onClick={resetWeldAnim} disabled={weldPhase === 'idle'}
+            className="w-full rounded-lg bg-slate-200 py-1 text-[10px] text-slate-600 transition hover:bg-slate-300 disabled:opacity-40">
+            ⏹ Reset
+          </button>
+        </div>
+      </div>
+
+      {/* ── Status bar dưới: nhiệt + nugget ── */}
+      {weldPhase !== 'idle' && (
+        <div className="pointer-events-auto absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-4 rounded-full bg-black/70 px-4 py-1.5 text-[11px] text-white backdrop-blur">
+          <span className="text-white/50">Phase:</span>
+          <span className="font-semibold text-sky-300">{phaseLabel[weldPhase]}</span>
+          {tf && (
+            <>
+              <span className="text-white/30">|</span>
+              <span className="text-white/50">Nugget ⌀</span>
+              <span className="font-semibold text-orange-300">{meltD} mm</span>
+              <span className="text-white/30">|</span>
+              <span className="text-white/50">T<sub>max</sub></span>
+              <span className={`font-semibold ${(peakT ?? 0) > 1400 ? 'text-red-300' : 'text-yellow-300'}`}>
+                {peakT !== null ? `${peakT} °C` : '—'}
+              </span>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Scene bên trong Canvas ───────────────────────────────────────────────────
 
 function Scene({ orbitRef }: { orbitRef: React.RefObject<OrbitControlsImpl> }) {
   const stackRef = useRef<WeldStackHandles>(null);
-  const { selectedPart, fixedParts, transformMode, setSelectedPart, setPartTransform } = useStore();
+  const { selectedPart, fixedParts, transformMode, weldPhase, setPartTransform } = useStore();
 
+  const isAnimating = weldPhase !== 'idle' && weldPhase !== 'done';
   const selectedGroup = selectedPart ? stackRef.current?.getGroupRef(selectedPart) ?? null : null;
   const isFixed = selectedPart ? fixedParts.includes(selectedPart) : true;
 
@@ -20,7 +220,6 @@ function Scene({ orbitRef }: { orbitRef: React.RefObject<OrbitControlsImpl> }) {
 
   const handleDragEnd = useCallback(() => {
     if (orbitRef.current) orbitRef.current.enabled = true;
-    // Sync vị trí sau khi kéo xong
     if (selectedPart && selectedGroup) {
       setPartTransform(selectedPart, {
         position: selectedGroup.position.toArray() as [number, number, number],
@@ -29,98 +228,96 @@ function Scene({ orbitRef }: { orbitRef: React.RefObject<OrbitControlsImpl> }) {
     }
   }, [selectedPart, selectedGroup, setPartTransform]);
 
+  // ── Mate callback (cần bounding box từ Three.js objects) ──
+  const handleMate = useCallback((movingRole: MeshRole, anchorRole: MeshRole) => {
+    const movingGroup = stackRef.current?.getGroupRef(movingRole);
+    const anchorGroup = stackRef.current?.getGroupRef(anchorRole);
+    if (!movingGroup || !anchorGroup) return;
+
+    const movingBox = new THREE.Box3().setFromObject(movingGroup);
+    const anchorBox = new THREE.Box3().setFromObject(anchorGroup);
+
+    // Căn mặt gần nhất theo Y
+    const movingCenter = movingGroup.position.y;
+    const anchorCenter = anchorGroup.position.y;
+    let newY: number;
+    if (movingCenter >= anchorCenter) {
+      // Moving phía trên → snap đáy moving = đỉnh anchor
+      newY = movingGroup.position.y + (anchorBox.max.y - movingBox.min.y);
+    } else {
+      // Moving phía dưới → snap đỉnh moving = đáy anchor
+      newY = movingGroup.position.y + (anchorBox.min.y - movingBox.max.y);
+    }
+    movingGroup.position.y = newY;
+    setPartTransform(movingRole, {
+      position: [movingGroup.position.x, newY, movingGroup.position.z],
+      rotation: [movingGroup.rotation.x, movingGroup.rotation.y, movingGroup.rotation.z],
+    });
+  }, [setPartTransform]);
+
   return (
     <>
-      <ambientLight intensity={0.6} />
-      <hemisphereLight args={['#bcd4ff', '#20303f', 0.6]} />
-      <directionalLight position={[20, 30, 15]} intensity={1.6} />
-      <directionalLight position={[-15, 10, -10]} intensity={0.6} />
-      <pointLight position={[0, 8, 0]} intensity={0.4} />
+      {/* Ánh sáng nền sáng */}
+      <ambientLight intensity={1.2} />
+      <hemisphereLight args={['#e8f0ff', '#c0d0e0', 0.8]} />
+      <directionalLight position={[25, 40, 20]} intensity={2.0} castShadow
+        shadow-mapSize={[1024, 1024]} shadow-camera-far={200} />
+      <directionalLight position={[-20, 15, -15]} intensity={0.8} />
+      <pointLight position={[0, 30, 0]} intensity={0.5} color="#fff5e0" />
 
       <WeldStack ref={stackRef} />
+      <WeldAnimation stackRef={stackRef} />
 
-      {selectedGroup && !isFixed && (
+      {/* TransformControls chỉ hoạt động khi không animate */}
+      {selectedGroup && !isFixed && !isAnimating && (
         <TransformControls
           object={selectedGroup}
           mode={transformMode}
-          size={0.7}
+          size={0.6}
           onMouseDown={handleDragStart}
           onMouseUp={handleDragEnd}
         />
       )}
 
-      <Grid args={[60, 60]} cellSize={2} cellColor="#1e2a36" sectionSize={10}
-        sectionColor="#2e4156" position={[0, -0.001, 0]} infiniteGrid fadeDistance={120} />
+      {/* Grid sáng */}
+      <Grid
+        args={[80, 80]}
+        cellSize={2}
+        cellColor="#b0bec8"
+        sectionSize={10}
+        sectionColor="#8fa0b0"
+        position={[0, -0.01, 0]}
+        infiniteGrid
+        fadeDistance={150}
+      />
 
       <OrbitControls ref={orbitRef} makeDefault target={[0, 0, 0]}
-        onClick={() => setSelectedPart(null)} />
+        maxDistance={500} minDistance={2} />
+
+      {/* Panel HTML đặt trong Canvas để truy cập callback handleMate */}
+      <Html fullscreen>
+        <AssemblyPanel onMate={handleMate} />
+      </Html>
     </>
   );
 }
 
-// ─── Panel overlay (outside Canvas, absolute positioned) ─────────────────────
-
-const PART_LABELS: [MeshRole, string][] = [
-  ['part1', 'Linh kiện 1'],
-  ['part2', 'Linh kiện 2'],
-  ['electrode_upper', 'Điện cực trên'],
-  ['electrode_lower', 'Điện cực dưới'],
-  ['fixture', 'Linh kiện gá'],
-];
-
-function AssemblyPanel() {
-  const { selectedPart, fixedParts, transformMode, setSelectedPart, toggleFixed, setTransformMode } = useStore();
-
-  return (
-    <div className="pointer-events-none absolute left-2 top-2 z-10 flex flex-col gap-2">
-      {/* Mode selector */}
-      <div className="pointer-events-auto flex gap-1 rounded bg-black/70 p-1 text-[11px] backdrop-blur">
-        {(['translate', 'rotate'] as const).map((m) => (
-          <button key={m} onClick={() => setTransformMode(m)}
-            className={`rounded px-2 py-0.5 ${transformMode === m ? 'bg-sky-500/40 text-sky-200' : 'text-white/50 hover:text-white/80'}`}>
-            {m === 'translate' ? '⇥ Di chuyển' : '↻ Xoay'}
-          </button>
-        ))}
-      </div>
-
-      {/* Part list */}
-      <div className="pointer-events-auto rounded bg-black/70 p-1.5 backdrop-blur space-y-1">
-        <div className="text-[10px] text-white/40 mb-1">Click vào linh kiện trong viewport để chọn</div>
-        {PART_LABELS.map(([role, label]) => {
-          const isFixed = fixedParts.includes(role);
-          const isSelected = selectedPart === role;
-          return (
-            <div key={role} className={`flex items-center justify-between gap-2 rounded px-2 py-1 text-[11px] cursor-pointer transition-colors ${isSelected ? 'bg-sky-500/20 text-sky-200' : 'text-white/70 hover:bg-white/5'}`}
-              onClick={() => setSelectedPart(isSelected ? null : role)}>
-              <span>{label}</span>
-              <button
-                className={`rounded px-1.5 py-0.5 text-[10px] transition-colors ${isFixed ? 'bg-rose-500/30 text-rose-300' : 'bg-emerald-500/20 text-emerald-300'}`}
-                onClick={(e) => { e.stopPropagation(); toggleFixed(role); }}
-                title={isFixed ? 'Đang cố định — click để cho di chuyển' : 'Đang di chuyển được — click để cố định'}
-              >
-                {isFixed ? '🔒 Fix' : '✦ Move'}
-              </button>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-// ─── Exported component ───────────────────────────────────────────────────────
+// ─── Export ───────────────────────────────────────────────────────────────────
 
 export function WeldScene() {
   const orbitRef = useRef<OrbitControlsImpl>(null);
 
   return (
-    <div className="relative h-full w-full">
-      <Canvas frameloop="demand" dpr={[1, 2]}
-        camera={{ position: [18, 14, 22], fov: 45, near: 0.1, far: 2000 }}>
-        <color attach="background" args={['#0b0f14']} />
-        <Scene orbitRef={orbitRef} />
-      </Canvas>
-      <AssemblyPanel />
-    </div>
+    <Canvas
+      frameloop="always"
+      dpr={[1, 2]}
+      camera={{ position: [22, 16, 28], fov: 42, near: 0.1, far: 2000 }}
+      shadows
+    >
+      {/* Nền sáng xanh xám nhạt */}
+      <color attach="background" args={['#d6e4ee']} />
+      <fog attach="fog" args={['#d6e4ee', 120, 400]} />
+      <Scene orbitRef={orbitRef} />
+    </Canvas>
   );
 }

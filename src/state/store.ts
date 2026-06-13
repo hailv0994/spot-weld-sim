@@ -92,6 +92,14 @@ interface AppState {
   weldGapBefore: number;
   /** Khoảng cách 2 linh kiện SAU hàn (yêu cầu, mm). 0 = chưa đặt. */
   weldGapAfter: number;
+  /** Vị trí snapshot khi TRƯỚC hàn (điện cực mở). */
+  preWeldTransforms: Partial<Record<MeshRole, PartTransform>>;
+  /** Vị trí snapshot khi SAU hàn (setdown xong). */
+  postWeldTransforms: Partial<Record<MeshRole, PartTransform>>;
+  /** Các nhóm linh kiện di chuyển cùng nhau (block). */
+  blocks: MeshRole[][];
+  /** Pha animation hiện tại. */
+  weldPhase: 'idle' | 'approach' | 'welding' | 'done';
 
   // actions
   setMat1: (m: Partial<Material>) => void;
@@ -113,6 +121,14 @@ interface AppState {
   setSelectedPart: (role: MeshRole | null) => void;
   setTransformMode: (m: 'translate' | 'rotate') => void;
   setWeldGap: (before: number, after: number) => void;
+  savePreWeld: () => void;
+  savePostWeld: () => void;
+  addBlock: (a: MeshRole, b: MeshRole) => void;
+  removeBlock: (role: MeshRole) => void;
+  clearBlocks: () => void;
+  setWeldPhase: (phase: 'idle' | 'approach' | 'welding' | 'done') => void;
+  startWeldAnim: () => void;
+  resetWeldAnim: () => void;
 
   runOptimize: () => void;
   runManual: () => void;
@@ -162,6 +178,10 @@ export const useStore = create<AppState>((set, get) => ({
   transformMode: 'translate',
   weldGapBefore: 0,
   weldGapAfter: 0,
+  preWeldTransforms: {},
+  postWeldTransforms: {},
+  blocks: [],
+  weldPhase: 'idle',
 
   setMat1: (m) => set((s) => ({ mat1: { ...s.mat1, ...m } })),
   setMat2: (m) => set((s) => ({ mat2: { ...s.mat2, ...m } })),
@@ -208,6 +228,36 @@ export const useStore = create<AppState>((set, get) => ({
   setSelectedPart: (role) => set({ selectedPart: role }),
   setTransformMode: (m) => set({ transformMode: m }),
   setWeldGap: (before, after) => set({ weldGapBefore: before, weldGapAfter: after }),
+
+  savePreWeld: () => set((s) => ({ preWeldTransforms: { ...s.partTransforms } })),
+  savePostWeld: () => set((s) => ({ postWeldTransforms: { ...s.partTransforms } })),
+
+  addBlock: (a, b) =>
+    set((s) => {
+      // Tìm block chứa a hoặc b, nếu có thì merge, không thì tạo mới
+      const existing = s.blocks.filter((bl) => bl.includes(a) || bl.includes(b));
+      const others = s.blocks.filter((bl) => !bl.includes(a) && !bl.includes(b));
+      const merged = Array.from(new Set([...existing.flat(), a, b]));
+      return { blocks: [...others, merged] };
+    }),
+  removeBlock: (role) =>
+    set((s) => ({
+      blocks: s.blocks
+        .map((bl) => bl.filter((r) => r !== role))
+        .filter((bl) => bl.length > 1),
+    })),
+  clearBlocks: () => set({ blocks: [] }),
+
+  setWeldPhase: (phase) => set({ weldPhase: phase }),
+  startWeldAnim: () => set({ weldPhase: 'approach', thermal: null, thermalFrame: 0 }),
+  resetWeldAnim: () => set((s) => ({
+    weldPhase: 'idle',
+    thermalFrame: 0,
+    // Khôi phục partTransforms về preWeldTransforms nếu có
+    partTransforms: Object.keys(s.preWeldTransforms).length > 0
+      ? { ...s.preWeldTransforms }
+      : s.partTransforms,
+  })),
 
   runOptimize: () => {
     const s = get();
