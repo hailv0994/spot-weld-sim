@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import type { Material } from '../physics/types';
-import { getPreset } from '../physics/materials';
+import { resolveMaterial } from '../physics/materialInference';
 import { NumberField } from './fields';
 
-// Nhập mã vật liệu → khớp chính xác trong CSDL thì tự điền thông số.
+// Nhập mã vật liệu tiêu chuẩn → tự phân tích thông số (CSDL hoặc suy luận theo họ).
 // Không gợi ý; user tự điền mã. Vẫn mở "Chi tiết" để sửa tay nếu cần.
 
 interface Props {
@@ -13,11 +13,15 @@ interface Props {
   onReplace: (m: Material) => void;
 }
 
-type MatchState = 'idle' | 'matched' | 'notfound';
+type MatchState =
+  | { kind: 'idle' }
+  | { kind: 'preset'; family: string }
+  | { kind: 'inferred'; family: string }
+  | { kind: 'notfound' };
 
 export function MaterialEditor({ title, mat, onPatch, onReplace }: Props) {
   const [code, setCode] = useState(mat.id);
-  const [match, setMatch] = useState<MatchState>('idle');
+  const [match, setMatch] = useState<MatchState>({ kind: 'idle' });
   const [showDetail, setShowDetail] = useState(false);
 
   // Đồng bộ ô mã khi vật liệu bị thay từ ngoài (preset/AI).
@@ -25,18 +29,19 @@ export function MaterialEditor({ title, mat, onPatch, onReplace }: Props) {
 
   function apply(raw: string) {
     setCode(raw);
-    const key = raw.trim().toLowerCase();
-    if (!key) {
-      setMatch('idle');
+    if (!raw.trim()) {
+      setMatch({ kind: 'idle' });
       return;
     }
-    const p = getPreset(key);
-    if (p) {
-      onReplace(p);
-      setMatch('matched');
-    } else {
-      setMatch('notfound');
+    const r = resolveMaterial(raw);
+    if (!r) {
+      setMatch({ kind: 'notfound' });
+      return;
     }
+    onReplace(r.material);
+    setMatch(r.source === 'preset'
+      ? { kind: 'preset', family: r.family }
+      : { kind: 'inferred', family: r.family });
   }
 
   return (
@@ -63,12 +68,17 @@ export function MaterialEditor({ title, mat, onPatch, onReplace }: Props) {
         />
       </label>
 
-      {match === 'matched' && (
-        <p className="text-[11px] text-emerald-300">✓ Đã nhận dạng — tự điền thông số từ CSDL.</p>
+      {match.kind === 'preset' && (
+        <p className="text-[11px] text-emerald-300">✓ {match.family} — lấy thông số từ CSDL.</p>
       )}
-      {match === 'notfound' && (
+      {match.kind === 'inferred' && (
+        <p className="text-[11px] text-sky-300">
+          ✓ Suy luận theo họ: {match.family}. Giá trị là ước lượng — kiểm tra/hiệu chỉnh ở “Chi tiết”.
+        </p>
+      )}
+      {match.kind === 'notfound' && (
         <p className="text-[11px] text-amber-300">
-          Mã không có trong CSDL — mở “Chi tiết” để nhập thông số thủ công.
+          Không nhận dạng được mã — mở “Chi tiết” để nhập thông số thủ công.
         </p>
       )}
 
