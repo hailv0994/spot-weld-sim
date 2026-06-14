@@ -249,14 +249,50 @@ export const useStore = create<AppState>((set, get) => ({
   clearBlocks: () => set({ blocks: [] }),
 
   setWeldPhase: (phase) => set({ weldPhase: phase }),
-  startWeldAnim: () => set({ weldPhase: 'approach', thermal: null, thermalFrame: 0 }),
+
+  startWeldAnim: () => {
+    const s = get();
+
+    // Tính thermal trước (synchronous) — để sẵn khi welding phase bắt đầu, tránh freeze giữa chừng
+    if (!s.thermal) {
+      get().runThermal();
+    }
+
+    // Auto-generate vị trí TRƯỚC hàn nếu user chưa set:
+    // điện cực trên rút lên +12mm, điện cực dưới xuống -12mm, part theo block
+    let preWeld = get().preWeldTransforms;
+    if (Object.keys(preWeld).length === 0) {
+      const RETRACT = 12; // mm
+      const auto: Partial<Record<MeshRole, import('./store').PartTransform>> = {};
+      const curr = get();
+      for (const role of ['part1', 'part2', 'electrode_upper', 'electrode_lower', 'fixture'] as MeshRole[]) {
+        if (curr.fixedParts.includes(role)) continue;
+        const t = curr.partTransforms[role];
+        const dir = (role === 'electrode_upper') ? 1 : (role === 'electrode_lower') ? -1 : 0;
+        // Linh kiện trong block với điện cực cũng rút theo
+        let blockDir = 0;
+        for (const block of curr.blocks) {
+          if (!block.includes(role)) continue;
+          if (block.includes('electrode_upper')) blockDir = 1;
+          else if (block.includes('electrode_lower')) blockDir = -1;
+        }
+        const retract = (dir !== 0 ? dir : blockDir) * RETRACT;
+        auto[role] = {
+          position: [(t?.position[0] ?? 0), (t?.position[1] ?? 0) + retract, (t?.position[2] ?? 0)],
+          rotation: t?.rotation ?? [0, 0, 0],
+        };
+      }
+      preWeld = auto;
+      set({ preWeldTransforms: auto });
+    }
+
+    set({ weldPhase: 'approach', thermalFrame: 0 });
+  },
+
   resetWeldAnim: () => set((s) => ({
     weldPhase: 'idle',
     thermalFrame: 0,
-    // Khôi phục partTransforms về preWeldTransforms nếu có
-    partTransforms: Object.keys(s.preWeldTransforms).length > 0
-      ? { ...s.preWeldTransforms }
-      : s.partTransforms,
+    partTransforms: Object.keys(s.preWeldTransforms).length > 0 ? { ...s.preWeldTransforms } : s.partTransforms,
   })),
 
   runOptimize: () => {
